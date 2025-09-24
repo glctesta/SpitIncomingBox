@@ -9,7 +9,10 @@ import os
 from datetime import datetime
 from db_connection import DatabaseConnection
 from config_manager import ConfigManager
-
+import time
+import threading
+from queue import Queue
+from PrinterConnection import PrinterConnection
 
 class LoginWindow:
     def __init__(self, parent, on_login_success):
@@ -21,22 +24,14 @@ class LoginWindow:
         self.window.transient(parent)
         self.window.grab_set()
 
-        # Centra la finestra
         self._center_window()
-
         self.config_manager = ConfigManager()
         self.db_connection = None
         self.on_login_success = on_login_success
-
         self.username_var = tk.StringVar()
         self.password_var = tk.StringVar()
-
         self.setup_ui()
-
-        # Binding del tasto Enter alla finestra
         self.window.bind('<Return>', lambda e: self.login())
-
-        # Focus iniziale sul campo username
         self.username_entry.focus_set()
 
     def _center_window(self):
@@ -51,23 +46,19 @@ class LoginWindow:
         main_frame = ttk.Frame(self.window, padding="30")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
-        # Titolo
         title_label = ttk.Label(main_frame, text="Login", font=('Arial', 16, 'bold'))
         title_label.grid(row=0, column=0, columnspan=2, pady=(0, 20))
 
-        # Username
         ttk.Label(main_frame, text="Nome Utente:", font=('Arial', 10)).grid(row=1, column=0, sticky=tk.W, pady=(0, 5))
         self.username_entry = ttk.Entry(main_frame, textvariable=self.username_var, width=35)
         self.username_entry.grid(row=2, column=0, pady=(0, 20))
         self.username_entry.bind('<Return>', lambda e: self.password_entry.focus())
 
-        # Password
         ttk.Label(main_frame, text="Password:", font=('Arial', 10)).grid(row=3, column=0, sticky=tk.W, pady=(0, 5))
         self.password_entry = ttk.Entry(main_frame, textvariable=self.password_var, show="*", width=35)
         self.password_entry.grid(row=4, column=0, pady=(0, 30))
         self.password_entry.bind('<Return>', lambda e: self.login())
 
-        # Pulsanti
         button_frame = ttk.Frame(main_frame)
         button_frame.grid(row=5, column=0, sticky=(tk.E, tk.W))
         button_frame.columnconfigure(0, weight=1)
@@ -77,7 +68,6 @@ class LoginWindow:
         self.login_button.grid(row=0, column=0, padx=10)
         ttk.Button(button_frame, text="Annulla", command=self.window.destroy, width=15).grid(row=0, column=1, padx=10)
 
-        # Configurazione grid
         self.window.columnconfigure(0, weight=1)
         self.window.rowconfigure(0, weight=1)
         main_frame.columnconfigure(0, weight=1)
@@ -96,7 +86,6 @@ class LoginWindow:
         try:
             user_info = self.db_connection.verify_credentials(username, password)
             if user_info:
-                # Se verify_credentials ritorna True (booleano), otteniamo i dettagli dell'utente
                 user_details = self._get_user_details(username)
                 self.on_login_success(user_details)
                 self.window.destroy()
@@ -111,7 +100,6 @@ class LoginWindow:
                 self.db_connection.disconnect()
 
     def _get_user_details(self, username):
-        """Ottiene i dettagli completi dell'utente dal database"""
         try:
             cursor = self.db_connection.connection.cursor()
             cursor.execute("""
@@ -122,13 +110,11 @@ class LoginWindow:
 
             result = cursor.fetchone()
             if result:
-                # Crea un oggetto semplice con gli attributi necessari
                 class User:
                     def __init__(self, user_id, name, username):
                         self.UserId = user_id
                         self.Name = name
                         self.Username = username
-
                 return User(result[0], result[1], result[2])
             return None
         except Exception as e:
@@ -144,7 +130,6 @@ class LoginWindow:
             messagebox.showerror("Errore", f"Impossibile connettersi al database: {str(e)}")
             return False
 
-
 class BoxSplitterApp:
     def __init__(self, root):
         self.root = root
@@ -152,11 +137,9 @@ class BoxSplitterApp:
         self.root.geometry("800x600")
         self.is_logged_in = False
 
-        # Frame principale
         self.main_frame = ttk.Frame(self.root)
         self.main_frame.grid(row=0, column=0, sticky='nsew')
 
-        # Inizializzazione delle variabili di istanza
         self.config_manager = ConfigManager()
         self.db_connection = DatabaseConnection(self.config_manager)
         self.current_user = None
@@ -165,21 +148,47 @@ class BoxSplitterApp:
         self.printer_config = {}
         self.printer_config_file = "printer_config.json"
 
-        # Variabili Tkinter
         self.status_var = tk.StringVar(value="Pronto")
         self.batch_number_var = tk.StringVar()
         self.divisions_var = tk.IntVar(value=2)
 
-        # Inizializzazione
         self.load_printer_config()
         self.setup_ui()
         self.show_login()
 
-        # Configurazione del grid
         self.root.grid_rowconfigure(0, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
         self.main_frame.grid_rowconfigure(1, weight=1)
         self.main_frame.grid_columnconfigure(0, weight=1)
+
+        # CORREZIONE: Inizializzazione corretta della stampante
+        self.printer = None
+        self._initialize_printer()
+
+    def _initialize_printer(self):
+        """Inizializza la connessione con la stampante - VERSIONE CORRETTA"""
+        try:
+            if not hasattr(self, 'printer_config'):
+                self.load_printer_config()
+
+            # CORREZIONE: Crea l'istanza correttamente
+            self.printer = PrinterConnection(  # Solo questo, niente parentesi extra
+                ip_address=self.printer_config.get('ip_address'),
+                port=int(self.printer_config.get('port', 9100)),
+                timeout=5
+            )
+
+            print(f"Stampante configurata: {self.printer_config.get('ip_address')}:{self.printer_config.get('port')}")
+            return True
+
+        except Exception as e:
+            print(f"Errore nell'inizializzazione della stampante: {str(e)}")
+            self.printer = None
+            return False
+
+    def _print_split_label_safe(self, item_code, quantity, batch_number):
+        """Metodo specifico per la stampa delle etichette split"""
+        return self._print_label_safe(item_code, quantity, batch_number)
 
     def setup_ui(self):
         # Frame principale
@@ -324,16 +333,34 @@ class BoxSplitterApp:
             messagebox.showinfo("Info", "Nessun utente loggato")
 
     def load_printer_config(self):
-        """Carica la configurazione della stampante dal file"""
-        if os.path.exists(self.printer_config_file):
-            try:
-                with open(self.printer_config_file, 'r') as f:
-                    self.printer_config = json.load(f)
-            except Exception as e:
-                print(f"Errore nel caricamento configurazione stampante: {e}")
-                self.printer_config = self._get_default_printer_config()
-        else:
-            self.printer_config = self._get_default_printer_config()
+        """Carica la configurazione della stampante"""
+        try:
+            with open(self.printer_config_file, 'r') as f:
+                self.printer_config = json.load(f)
+
+            # Validazione dei parametri necessari
+            required_params = ['ip_address', 'port', 'printer_name']
+            missing_params = [param for param in required_params
+                              if param not in self.printer_config]
+
+            if missing_params:
+                raise ValueError(f"Parametri mancanti nel file di configurazione: {missing_params}")
+
+            # Validazione del tipo di dati
+            if not isinstance(self.printer_config['port'], (int, str)):
+                raise ValueError("Il parametro 'port' deve essere un numero")
+
+        except FileNotFoundError:
+            messagebox.showerror("Errore",
+                                 f"File di configurazione stampante non trovato: {self.printer_config_file}")
+            self.printer_config = {}
+        except json.JSONDecodeError:
+            messagebox.showerror("Errore",
+                                 "File di configurazione stampante non valido")
+            self.printer_config = {}
+        except Exception as e:
+            messagebox.showerror("Errore",
+                                 f"Errore nel caricamento della configurazione stampante:\n{str(e)}")
 
     def _get_default_printer_config(self):
         """Restituisce la configurazione predefinita della stampante"""
@@ -511,93 +538,41 @@ Batch Number: {result.BatchNumber_HU}"""
         if entries:
             main_frame.grid_slaves(row=1, column=1)[0].focus()
 
-    # def perform_split(self, quantities):
-    #     """Esegue lo split delle quantità"""
-    #     if not self.current_data:
-    #         messagebox.showerror("Errore", "Nessun dato disponibile per lo split")
-    #         return
-    #
-    #     try:
-    #         if not self._ensure_database_connection():
-    #             return
-    #
-    #         with self.db_connection.connection as connection:
-    #             cursor = connection.cursor()
-    #
-    #             # Creiamo il valore OriginalWas nel formato richiesto
-    #             original_was = f"1 x {self.current_data.PackQty}"
-    #
-    #             # Aggiorna la quantità originale e imposta OriginalWas
-    #             cursor.execute("""
-    #                 UPDATE warehouse.dbo.incomingdet
-    #                 SET Qty = ?,
-    #                     OriginalWas = ?
-    #                 WHERE incomingdetid = ?
-    #             """, quantities[0], original_was, self.current_data.incomingdetid)
-    #
-    #             cursor.execute("""
-    #                 UPDATE warehouse.dbo.Packing
-    #                 SET qty = ?
-    #                 WHERE packingid = ?
-    #             """, quantities[0], self.current_data.PackingId)
-    #
-    #             print(f"Aggiornamento record originale: Quantità={quantities[0]}, OriginalWas={original_was}")
-    #
-    #             # Stampa l'etichetta per la scatola originale con la nuova quantità
-    #             self._print_label_safe(
-    #                 item_code=self.current_data.Code,
-    #                 quantity=str(quantities[0]),
-    #                 batch_number=self.current_data.BatchNumber_HU
-    #             )
-    #
-    #             # Crea nuove scatole per le quantità rimanenti
-    #             for i, qty in enumerate(quantities[1:], 1):
-    #                 new_batch_number = f"{self.current_data.BatchNumber_HU}-{i}"
-    #
-    #                 # Insert in incomingdet con OriginalWas
-    #                 cursor.execute("""
-    #                     INSERT INTO warehouse.dbo.incomingdet
-    #                     (incomingid, itemid, batchnumber, Qty, OriginalWas)
-    #                     OUTPUT INSERTED.IncomingDetId
-    #                     VALUES (?, ?, ?, ?, ?)
-    #                 """, self.current_data.incomingid, self.current_data.itemid,
-    #                                new_batch_number, qty, original_was)
-    #
-    #                 new_incomingdet_id = cursor.fetchone()[0]
-    #
-    #                 # Insert in packing
-    #                 cursor.execute("""
-    #                     INSERT INTO warehouse.dbo.packing
-    #                     (IncomingDetId, LocationId, Qty, Code, BatchNumber_HU,[CurrentDate],UserId)
-    #                     VALUES (?, ?, ?, ?, ?,GetDate(),?)
-    #                     """, new_incomingdet_id, self.current_data.locationid,
-    #                                qty, new_batch_number, new_batch_number, self.current_user_id)
-    #
-    #                 # Insert in SplitBoxes
-    #                 cursor.execute("""
-    #                     INSERT INTO warehouse.dbo.SplitBoxes
-    #                     (UserId, IncomingDetid)
-    #                     VALUES (?, ?)
-    #                 """, self.current_user_id, new_incomingdet_id)
-    #
-    #                 print(
-    #                     f"Inserimento nuovo record: Quantità={qty}, OriginalWas={original_was}, IncomingDetId={new_incomingdet_id}")
-    #
-    #                 # Stampa l'etichetta per la nuova scatola
-    #                 self._print_label_safe(
-    #                     item_code=self.current_data.Code,
-    #                     quantity=str(qty),
-    #                     batch_number=new_batch_number
-    #                 )
-    #
-    #             connection.commit()
-    #             messagebox.showinfo("Successo", "Split e stampa completati con successo!")
-    #             self._reset_after_split()
-    #
-    #     except Exception as e:
-    #         if self.db_connection.connection:
-    #             self.db_connection.connection.rollback()
-    #         messagebox.showerror("Errore", f"Errore durante lo split: {str(e)}")
+    def split_box(self):
+        """Gestisce l'intero processo di split della scatola"""
+        try:
+            # Validazione input
+            if not self._validate_split_input():
+                return
+
+            # Ottieni le quantità
+            quantities = self._calculate_quantities()
+            if not quantities:
+                return
+
+            # Conferma dall'utente
+            if not self._confirm_split(quantities):
+                return
+
+            # Salva nel database
+            if not self._save_split_to_database(quantities):
+                return
+
+            # Stampa le etichette
+            if not self._print_labels(quantities):
+                # Se la stampa fallisce, fai rollback del database
+                self._rollback_split()
+                return
+
+            # Aggiorna l'interfaccia
+            self._reset_after_split()
+
+            messagebox.showinfo("Successo", "Operazione completata con successo!")
+
+        except Exception as e:
+            messagebox.showerror("Errore", f"Errore durante lo split: {str(e)}")
+            self._rollback_split()
+
     def perform_split(self, quantities):
         """Esegue lo split delle quantità"""
         if not self.current_data:
@@ -609,15 +584,12 @@ Batch Number: {result.BatchNumber_HU}"""
 
         # Prepara tutte le etichette da stampare
         labels_to_print = []
-
-        # Prepara la prima etichetta (scatola originale)
         labels_to_print.append({
             'item_code': self.current_data.Code,
             'quantity': str(quantities[0]),
             'batch_number': self.current_data.BatchNumber_HU
         })
 
-        # Prepara le etichette per le nuove scatole
         for i, qty in enumerate(quantities[1:], 1):
             new_batch_number = f"{self.current_data.BatchNumber_HU}-{i}"
             labels_to_print.append({
@@ -626,88 +598,70 @@ Batch Number: {result.BatchNumber_HU}"""
                 'batch_number': new_batch_number
             })
 
-        # Loop di stampa con gestione errori
         print("Inizio processo di stampa etichette...")
         current_label_index = 0
+
         while current_label_index < len(labels_to_print):
             label = labels_to_print[current_label_index]
+            print(f"Tentativo di stampa etichetta {current_label_index + 1} di {len(labels_to_print)}")
 
             try:
-                print(f"Tentativo di stampa etichetta {current_label_index + 1} di {len(labels_to_print)}")
+                success = self._print_label_safe(
+                    item_code=label['item_code'],
+                    quantity=label['quantity'],
+                    batch_number=label['batch_number']
+                )
 
-                if self._print_label_safe(
-                        item_code=label['item_code'],
-                        quantity=label['quantity'],
-                        batch_number=label['batch_number']
-                ):
+                if success:
                     print(f"Etichetta {current_label_index + 1} stampata con successo")
-                    current_label_index += 1  # Procedi con la prossima etichetta
+                    current_label_index += 1
                 else:
-                    response = messagebox.askretrycancel(
-                        "Errore Stampa",
-                        f"Errore durante la stampa dell'etichetta {current_label_index + 1} di {len(labels_to_print)}.\n"
-                        f"Batch Number: {label['batch_number']}\n"
-                        "Vuoi riprovare la stampa?"
-                    )
-
-                    if not response:  # Se l'utente sceglie di non riprovare
-                        messagebox.showerror(
-                            "Operazione Annullata",
-                            "L'operazione di split è stata annullata. Nessuna modifica è stata salvata nel database."
-                        )
-                        return
-                    # Se l'utente sceglie di riprovare, il ciclo continuerà con la stessa etichetta
+                    raise Exception("Errore durante la stampa dell'etichetta")
 
             except Exception as e:
-                response = messagebox.askretrycancel(
-                    "Errore",
-                    f"Errore imprevisto durante la stampa: {str(e)}\n"
-                    "Vuoi riprovare la stampa?"
-                )
+                error_message = f"Errore durante la stampa dell'etichetta {current_label_index + 1}:\n{str(e)}\nVuoi riprovare?"
+                response = messagebox.askretrycancel("Errore Stampa", error_message)
+
                 if not response:
-                    messagebox.showerror(
-                        "Operazione Annullata",
-                        "L'operazione di split è stata annullata. Nessuna modifica è stata salvata nel database."
-                    )
+                    messagebox.showerror("Operazione Annullata", "Split annullato. Nessuna modifica salvata.")
                     return
 
-        # Se siamo arrivati qui, tutte le etichette sono state stampate con successo
-        print("Tutte le etichette sono state stampate con successo. Procedo con il salvataggio nel database.")
+        # Se tutte le etichette sono stampate, salva nel database
+        self._save_split_to_database(quantities)
 
-        # Ora procediamo con il salvataggio nel database
+    def _rollback_split(self):
+        """Esegue il rollback delle modifiche in caso di errore"""
+        try:
+            if self.db_connection.connection:
+                self.db_connection.connection.rollback()
+                print("Eseguito rollback delle modifiche al database")
+        except Exception as e:
+            print(f"Errore durante il rollback: {str(e)}")
+
+    def _save_split_to_database(self, quantities):
+        """Salva le modifiche dello split nel database"""
         try:
             with self.db_connection.connection as connection:
                 cursor = connection.cursor()
-
-                # Creiamo il valore OriginalWas nel formato richiesto
                 original_was = f"1 x {self.current_data.PackQty}"
 
-                # Aggiorna la quantità originale e imposta OriginalWas
                 cursor.execute("""
-                    UPDATE warehouse.dbo.incomingdet 
-                    SET Qty = ?, 
-                        OriginalWas = ?
+                    UPDATE warehouse.dbo.incomingdet
+                    SET Qty = ?, OriginalWas = ?
                     WHERE incomingdetid = ?
                 """, quantities[0], original_was, self.current_data.incomingdetid)
 
-                # Query modificata per includere BatchNumber_HU
                 cursor.execute("""
-                    UPDATE warehouse.dbo.Packing 
-                    SET qty = ?, 
-                        BatchNumber_HU = ?
+                    UPDATE warehouse.dbo.Packing
+                    SET qty = ?, BatchNumber_HU = ?
                     WHERE packingid = ?
                 """, quantities[0], self.current_data.BatchNumber_HU, self.current_data.PackingId)
 
-                print(
-                    f"Aggiornamento record originale: Quantità={quantities[0]}, BatchNumber_HU={self.current_data.BatchNumber_HU}")
-
-                # Crea nuove scatole per le quantità rimanenti
                 for i, qty in enumerate(quantities[1:], 1):
                     new_batch_number = f"{self.current_data.BatchNumber_HU}-{i}"
 
-                    # Insert in incomingdet con OriginalWas
                     cursor.execute("""
-                        INSERT INTO warehouse.dbo.incomingdet 
+                        INSERT INTO warehouse.dbo.incomingdet
                         (incomingid, itemid, batchnumber, Qty, OriginalWas)
                         OUTPUT INSERTED.IncomingDetId
                         VALUES (?, ?, ?, ?, ?)
@@ -716,23 +670,18 @@ Batch Number: {result.BatchNumber_HU}"""
 
                     new_incomingdet_id = cursor.fetchone()[0]
 
-                    # Insert in packing
                     cursor.execute("""
-                        INSERT INTO warehouse.dbo.packing 
+                        INSERT INTO warehouse.dbo.packing
                         (IncomingDetId, LocationId, Qty, Code, BatchNumber_HU,[CurrentDate],UserId)
                         VALUES (?, ?, ?, ?, ?,GetDate(),?)
-                        """, new_incomingdet_id, self.current_data.locationid,
+                    """, new_incomingdet_id, self.current_data.locationid,
                                    qty, new_batch_number, new_batch_number, self.current_user_id)
 
-                    # Insert in SplitBoxes
                     cursor.execute("""
-                        INSERT INTO warehouse.dbo.SplitBoxes 
+                        INSERT INTO warehouse.dbo.SplitBoxes
                         (UserId, IncomingDetid)
                         VALUES (?, ?)
                     """, self.current_user_id, new_incomingdet_id)
-
-                    print(
-                        f"Inserimento nuovo record: Quantità={qty}, BatchNumber_HU={new_batch_number}, IncomingDetId={new_incomingdet_id}")
 
                 connection.commit()
                 messagebox.showinfo("Successo", "Split e stampa completati con successo!")
@@ -741,63 +690,118 @@ Batch Number: {result.BatchNumber_HU}"""
         except Exception as e:
             if self.db_connection.connection:
                 self.db_connection.connection.rollback()
-            messagebox.showerror("Errore", f"Errore durante lo split: {str(e)}")
+            messagebox.showerror("Errore", f"Errore durante il salvataggio: {str(e)}")
 
-    def _print_label_safe(self, item_code, quantity, batch_number):
-        """Wrapper sicuro per la stampa delle etichette"""
+    def _confirm_split(self, quantities):
+        """Chiede conferma all'utente per lo split"""
+        message = "Confermi di voler dividere la scatola nelle seguenti quantità?\n\n"
+        message += f"Scatola originale: {quantities[0]} pezzi\n"
+        for i, qty in enumerate(quantities[1:], 1):
+            message += f"Nuova scatola {i}: {qty} pezzi\n"
+
+        return messagebox.askyesno("Conferma Split", message)
+
+    def _validate_split_input(self):
+        """Valida i dati di input prima dello split"""
         try:
-            self.print_label(item_code, quantity, batch_number)
-        except Exception as e:
-            print(f"Errore stampa etichetta: {str(e)}")
-            # Non blocchiamo l'operazione per un errore di stampa
+            # Verifica che ci siano dati correnti
+            if not hasattr(self, 'current_data') or not self.current_data:
+                raise ValueError("Nessun dato selezionato per lo split")
 
-    def print_label(self, item_code=None, quantity=None, batch_number=None):
-        """Stampa l'etichetta con i parametri specificati"""
-        try:
-            print(f"Tentativo di stampa: Codice={item_code}, Quantità={quantity}, Batch={batch_number}")
+            # Verifica che l'utente sia loggato
+            if not hasattr(self, 'current_user_id') or not self.current_user_id:
+                raise ValueError("Utente non autenticato")
 
-            if not (item_code and quantity and batch_number):
-                raise ValueError("Parametri mancanti per la stampa dell'etichetta")
+            # Verifica connessione database
+            if not self.db_connection or not self.db_connection.connection:
+                raise ValueError("Connessione al database non disponibile")
 
-            # Verifica la configurazione della stampante
-            if not self.verify_printer_config():
-                raise ValueError("Configurazione stampante non valida. Configurare IP e porta della stampante.")
+            # Verifica che la quantità totale sia corretta
+            total_qty = sum(self._calculate_quantities())
+            if total_qty != self.current_data.PackQty:
+                raise ValueError(
+                    f"La quantità totale ({total_qty}) non corrisponde alla quantità originale ({self.current_data.PackQty})")
 
-            print(
-                f"Usando configurazione stampante: IP={self.printer_config['ip_address']}, Porta={self.printer_config['port']}")
-
-            # Prepara il comando ZPL
-            zpl_command = f"""
-^XA
-^FO50,50^A0N,45,45^FDProdotto: {item_code}^FS
-^FO50,120^A0N,35,35^FDCodice: {item_code}^FS
-^FO50,180^BY3,2,80
-^BCN,80,Y,N,N,A^FD{item_code}^FS
-^FO50,300^A0N,35,35^FDQuantità: {quantity}^FS
-^FO50,350^BY3,2,80
-^BCN,80,Y,N,N,A^FD{quantity}^FS
-^FO50,470^A0N,35,35^FDLotto: {batch_number}^FS
-^FO50,520^BY3,2,80
-^BCN,80,Y,N,N,A^FD{batch_number}^FS
-^XZ
-"""
-
-            # Invia direttamente alla stampante Zebra via socket
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(5)  # Timeout di 5 secondi
-                print(f"Connessione a {self.printer_config['ip_address']}:{self.printer_config['port']}")
-                s.connect((self.printer_config['ip_address'], int(self.printer_config['port'])))
-                print("Connessione stabilita, invio dati...")
-                s.send(zpl_command.encode())
-                print("Dati inviati con successo")
-
-            self.status_var.set(f"Etichetta stampata con successo per {batch_number}")
             return True
 
         except Exception as e:
-            print(f"Errore durante la stampa: {str(e)}")
-            messagebox.showerror("Errore di stampa", f"Impossibile stampare l'etichetta: {str(e)}")
+            messagebox.showerror("Errore Validazione", str(e))
             return False
+
+    def _ensure_printer_connection(self):
+        """Verifica e ristabilisce la connessione con la stampante"""
+        try:
+            if self.printer is None:
+                if not self._initialize_printer():
+                    return False
+
+            if not self.printer.is_connected():
+                print("Tentativo di connessione alla stampante...")
+                return self.printer.connect()
+
+            return True
+        except Exception as e:
+            print(f"Errore di connessione alla stampante: {str(e)}")
+            return False
+
+    def _print_label_safe(self, item_code, quantity, batch_number):
+        """Stampa l'etichetta con gestione degli errori"""
+        max_retries = 3
+        retry_count = 0
+
+        while retry_count < max_retries:
+            try:
+                print(f"Tentativo di stampa {retry_count + 1} per {batch_number}")
+
+                if not self._ensure_printer_connection():
+                    print("Connessione stampante non disponibile")
+                    retry_count += 1
+                    time.sleep(2)
+                    continue
+
+                success = self.printer.print_label(
+                    item_code=item_code,
+                    quantity=quantity,
+                    batch_number=batch_number
+                )
+
+                if success:
+                    print(f"Etichetta stampata con successo: {batch_number}")
+                    return True
+                else:
+                    print(f"Stampa fallita per {batch_number}")
+                    retry_count += 1
+                    time.sleep(2)
+
+            except Exception as e:
+                print(f"Errore durante la stampa (tentativo {retry_count + 1}): {str(e)}")
+                retry_count += 1
+                time.sleep(2)
+
+        print(f"Tutti i {max_retries} tentativi di stampa falliti per {batch_number}")
+        return False
+
+    def print_label(self, item_code, quantity, batch_number):
+        """Metodo per la stampa delle etichette con retry"""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                if self.printer is None:
+                    if not self._initialize_printer():
+                        raise Exception("Impossibile inizializzare la stampante")
+
+                success = self.printer.print_label(item_code, quantity, batch_number)
+                if success:
+                    return True
+
+            except Exception as e:
+                if attempt == max_retries - 1:  # Ultimo tentativo
+                    messagebox.showerror("Errore Stampa",
+                                         f"Impossibile stampare l'etichetta dopo {max_retries} tentativi:\n{str(e)}")
+                    return False
+                time.sleep(1)  # Attendi prima del retry
+                continue
+        return False
 
     def verify_printer_config(self):
         """Verifica che la configurazione della stampante sia valida"""
@@ -877,10 +881,29 @@ Batch Number: {result.BatchNumber_HU}"""
 
 
 def main():
-    root = tk.Tk()
-    app = BoxSplitterApp(root)
-    root.mainloop()
+    try:
+        root = tk.Tk()
+        app = BoxSplitterApp(root)
+        root.protocol("WM_DELETE_WINDOW", lambda: on_closing(root))
+        root.mainloop()
+    except KeyboardInterrupt:
+        print("\nApplicazione terminata dall'utente")
+    except Exception as e:
+        print(f"Errore imprevisto: {e}")
+    finally:
+        try:
+            root.destroy()
+        except:
+            pass
 
+def on_closing(root):
+    """Gestisce la chiusura pulita dell'applicazione"""
+    try:
+        if messagebox.askokcancel("Chiudi", "Vuoi chiudere l'applicazione?"):
+            root.quit()
+            root.destroy()
+    except:
+        root.destroy()
 
 if __name__ == "__main__":
     main()
