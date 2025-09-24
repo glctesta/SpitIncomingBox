@@ -1,0 +1,4 @@
+2025-09-23 16:50:19,900 - root - ERROR - Errore durante la raccolta dei dati: 'ApplicationManager' object has no attribute '_check_database_connection'
+2025-09-23 16:50:19,900 - root - ERROR - Errore durante la raccolta dei dati: 'ApplicationManager' object has no attribute '_check_database_connection'
+2025-09-23 16:50:19,902 - root - INFO - Stato dell'applicazione salvato con successo
+2025-09-23 16:50:19,902 - root - INFO - Stato dell'applicazione salvato con successo
