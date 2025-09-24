@@ -10,13 +10,13 @@ def main():
     # for driver in pyodbc.drivers():
     #     print(driver)
     config_manager = ConfigManager()
-    config_manager.save_config(
-             driver='ODBC Driver 18 for SQL Server',
-             server='roghipsql01.vandewiele.local\\emsreset',
-             database='warehousenew',
-             username='emsreset',
-             password='E6QhqKUxHFXTbkB7eA8c9ya'
-         )
+    # config_manager.save_config(
+    #          driver='ODBC Driver 18 for SQL Server',
+    #          server='roghipsql01.vandewiele.local\\emsreset',
+    #          database='warehouse',
+    #          username='emsreset',
+    #          password='E6QhqKUxHFXTbkB7eA8c9ya'
+    #      )
 
     # Utilizzo della connessione
     db = DatabaseConnection(config_manager)

@@ -511,16 +511,171 @@ Batch Number: {result.BatchNumber_HU}"""
         if entries:
             main_frame.grid_slaves(row=1, column=1)[0].focus()
 
+    # def perform_split(self, quantities):
+    #     """Esegue lo split delle quantità"""
+    #     if not self.current_data:
+    #         messagebox.showerror("Errore", "Nessun dato disponibile per lo split")
+    #         return
+    #
+    #     try:
+    #         if not self._ensure_database_connection():
+    #             return
+    #
+    #         with self.db_connection.connection as connection:
+    #             cursor = connection.cursor()
+    #
+    #             # Creiamo il valore OriginalWas nel formato richiesto
+    #             original_was = f"1 x {self.current_data.PackQty}"
+    #
+    #             # Aggiorna la quantità originale e imposta OriginalWas
+    #             cursor.execute("""
+    #                 UPDATE warehouse.dbo.incomingdet
+    #                 SET Qty = ?,
+    #                     OriginalWas = ?
+    #                 WHERE incomingdetid = ?
+    #             """, quantities[0], original_was, self.current_data.incomingdetid)
+    #
+    #             cursor.execute("""
+    #                 UPDATE warehouse.dbo.Packing
+    #                 SET qty = ?
+    #                 WHERE packingid = ?
+    #             """, quantities[0], self.current_data.PackingId)
+    #
+    #             print(f"Aggiornamento record originale: Quantità={quantities[0]}, OriginalWas={original_was}")
+    #
+    #             # Stampa l'etichetta per la scatola originale con la nuova quantità
+    #             self._print_label_safe(
+    #                 item_code=self.current_data.Code,
+    #                 quantity=str(quantities[0]),
+    #                 batch_number=self.current_data.BatchNumber_HU
+    #             )
+    #
+    #             # Crea nuove scatole per le quantità rimanenti
+    #             for i, qty in enumerate(quantities[1:], 1):
+    #                 new_batch_number = f"{self.current_data.BatchNumber_HU}-{i}"
+    #
+    #                 # Insert in incomingdet con OriginalWas
+    #                 cursor.execute("""
+    #                     INSERT INTO warehouse.dbo.incomingdet
+    #                     (incomingid, itemid, batchnumber, Qty, OriginalWas)
+    #                     OUTPUT INSERTED.IncomingDetId
+    #                     VALUES (?, ?, ?, ?, ?)
+    #                 """, self.current_data.incomingid, self.current_data.itemid,
+    #                                new_batch_number, qty, original_was)
+    #
+    #                 new_incomingdet_id = cursor.fetchone()[0]
+    #
+    #                 # Insert in packing
+    #                 cursor.execute("""
+    #                     INSERT INTO warehouse.dbo.packing
+    #                     (IncomingDetId, LocationId, Qty, Code, BatchNumber_HU,[CurrentDate],UserId)
+    #                     VALUES (?, ?, ?, ?, ?,GetDate(),?)
+    #                     """, new_incomingdet_id, self.current_data.locationid,
+    #                                qty, new_batch_number, new_batch_number, self.current_user_id)
+    #
+    #                 # Insert in SplitBoxes
+    #                 cursor.execute("""
+    #                     INSERT INTO warehouse.dbo.SplitBoxes
+    #                     (UserId, IncomingDetid)
+    #                     VALUES (?, ?)
+    #                 """, self.current_user_id, new_incomingdet_id)
+    #
+    #                 print(
+    #                     f"Inserimento nuovo record: Quantità={qty}, OriginalWas={original_was}, IncomingDetId={new_incomingdet_id}")
+    #
+    #                 # Stampa l'etichetta per la nuova scatola
+    #                 self._print_label_safe(
+    #                     item_code=self.current_data.Code,
+    #                     quantity=str(qty),
+    #                     batch_number=new_batch_number
+    #                 )
+    #
+    #             connection.commit()
+    #             messagebox.showinfo("Successo", "Split e stampa completati con successo!")
+    #             self._reset_after_split()
+    #
+    #     except Exception as e:
+    #         if self.db_connection.connection:
+    #             self.db_connection.connection.rollback()
+    #         messagebox.showerror("Errore", f"Errore durante lo split: {str(e)}")
     def perform_split(self, quantities):
         """Esegue lo split delle quantità"""
         if not self.current_data:
             messagebox.showerror("Errore", "Nessun dato disponibile per lo split")
             return
 
-        try:
-            if not self._ensure_database_connection():
-                return
+        if not self._ensure_database_connection():
+            return
 
+        # Prepara tutte le etichette da stampare
+        labels_to_print = []
+
+        # Prepara la prima etichetta (scatola originale)
+        labels_to_print.append({
+            'item_code': self.current_data.Code,
+            'quantity': str(quantities[0]),
+            'batch_number': self.current_data.BatchNumber_HU
+        })
+
+        # Prepara le etichette per le nuove scatole
+        for i, qty in enumerate(quantities[1:], 1):
+            new_batch_number = f"{self.current_data.BatchNumber_HU}-{i}"
+            labels_to_print.append({
+                'item_code': self.current_data.Code,
+                'quantity': str(qty),
+                'batch_number': new_batch_number
+            })
+
+        # Loop di stampa con gestione errori
+        print("Inizio processo di stampa etichette...")
+        current_label_index = 0
+        while current_label_index < len(labels_to_print):
+            label = labels_to_print[current_label_index]
+
+            try:
+                print(f"Tentativo di stampa etichetta {current_label_index + 1} di {len(labels_to_print)}")
+
+                if self._print_label_safe(
+                        item_code=label['item_code'],
+                        quantity=label['quantity'],
+                        batch_number=label['batch_number']
+                ):
+                    print(f"Etichetta {current_label_index + 1} stampata con successo")
+                    current_label_index += 1  # Procedi con la prossima etichetta
+                else:
+                    response = messagebox.askretrycancel(
+                        "Errore Stampa",
+                        f"Errore durante la stampa dell'etichetta {current_label_index + 1} di {len(labels_to_print)}.\n"
+                        f"Batch Number: {label['batch_number']}\n"
+                        "Vuoi riprovare la stampa?"
+                    )
+
+                    if not response:  # Se l'utente sceglie di non riprovare
+                        messagebox.showerror(
+                            "Operazione Annullata",
+                            "L'operazione di split è stata annullata. Nessuna modifica è stata salvata nel database."
+                        )
+                        return
+                    # Se l'utente sceglie di riprovare, il ciclo continuerà con la stessa etichetta
+
+            except Exception as e:
+                response = messagebox.askretrycancel(
+                    "Errore",
+                    f"Errore imprevisto durante la stampa: {str(e)}\n"
+                    "Vuoi riprovare la stampa?"
+                )
+                if not response:
+                    messagebox.showerror(
+                        "Operazione Annullata",
+                        "L'operazione di split è stata annullata. Nessuna modifica è stata salvata nel database."
+                    )
+                    return
+
+        # Se siamo arrivati qui, tutte le etichette sono state stampate con successo
+        print("Tutte le etichette sono state stampate con successo. Procedo con il salvataggio nel database.")
+
+        # Ora procediamo con il salvataggio nel database
+        try:
             with self.db_connection.connection as connection:
                 cursor = connection.cursor()
 
@@ -535,20 +690,16 @@ Batch Number: {result.BatchNumber_HU}"""
                     WHERE incomingdetid = ?
                 """, quantities[0], original_was, self.current_data.incomingdetid)
 
+                # Query modificata per includere BatchNumber_HU
                 cursor.execute("""
                     UPDATE warehouse.dbo.Packing 
-                    SET qty = ? 
+                    SET qty = ?, 
+                        BatchNumber_HU = ?
                     WHERE packingid = ?
-                """, quantities[0], self.current_data.PackingId)
+                """, quantities[0], self.current_data.BatchNumber_HU, self.current_data.PackingId)
 
-                print(f"Aggiornamento record originale: Quantità={quantities[0]}, OriginalWas={original_was}")
-
-                # Stampa l'etichetta per la scatola originale con la nuova quantità
-                self._print_label_safe(
-                    item_code=self.current_data.Code,
-                    quantity=str(quantities[0]),
-                    batch_number=self.current_data.BatchNumber_HU
-                )
+                print(
+                    f"Aggiornamento record originale: Quantità={quantities[0]}, BatchNumber_HU={self.current_data.BatchNumber_HU}")
 
                 # Crea nuove scatole per le quantità rimanenti
                 for i, qty in enumerate(quantities[1:], 1):
@@ -581,14 +732,7 @@ Batch Number: {result.BatchNumber_HU}"""
                     """, self.current_user_id, new_incomingdet_id)
 
                     print(
-                        f"Inserimento nuovo record: Quantità={qty}, OriginalWas={original_was}, IncomingDetId={new_incomingdet_id}")
-
-                    # Stampa l'etichetta per la nuova scatola
-                    self._print_label_safe(
-                        item_code=self.current_data.Code,
-                        quantity=str(qty),
-                        batch_number=new_batch_number
-                    )
+                        f"Inserimento nuovo record: Quantità={qty}, BatchNumber_HU={new_batch_number}, IncomingDetId={new_incomingdet_id}")
 
                 connection.commit()
                 messagebox.showinfo("Successo", "Split e stampa completati con successo!")
