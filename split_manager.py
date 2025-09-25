@@ -514,63 +514,7 @@ Batch Number: {result.BatchNumber_HU}"""
 
         self._show_quantities_dialog(divisions)
 
-    # def _show_quantities_dialog(self, divisions):
-    #     """Mostra la finestra di dialogo per l'inserimento delle quantità"""
-    #     dialog = tk.Toplevel(self.root)
-    #     dialog.title("Inserisci Quantità")
-    #     dialog.geometry("400x400")
-    #     dialog.transient(self.root)
-    #     dialog.grab_set()
-    #
-    #     total_qty = float(self.current_data.PackQty)
-    #     entries = []
-    #
-    #     main_frame = ttk.Frame(dialog, padding="10")
-    #     main_frame.pack(fill=tk.BOTH, expand=True)
-    #
-    #     ttk.Label(main_frame, text=f"Quantità totale: {total_qty}", font=('Arial', 10, 'bold')).grid(row=0, column=0,
-    #                                                                                                  columnspan=2,
-    #                                                                                                  pady=10)
-    #
-    #     for i in range(divisions):
-    #         ttk.Label(main_frame, text=f"Quantità {i + 1}:").grid(row=i + 1, column=0, sticky=tk.W, pady=5)
-    #         entry_var = tk.StringVar()
-    #         entry = ttk.Entry(main_frame, textvariable=entry_var, width=15)
-    #         entry.grid(row=i + 1, column=1, padx=5, pady=5)
-    #         entries.append(entry_var)
-    #
-    #         if i < divisions - 1:
-    #             entry.bind('<Return>',
-    #                        lambda e, next_idx=i + 1: main_frame.grid_slaves(row=next_idx + 1, column=1)[0].focus())
-    #
-    #     button_frame = ttk.Frame(main_frame)
-    #     button_frame.grid(row=divisions + 2, column=0, columnspan=2, pady=20)
-    #
-    #     def validate_and_split():
-    #         try:
-    #             quantities = []
-    #             for i, entry_var in enumerate(entries):
-    #                 value = entry_var.get().strip()
-    #                 if not value:
-    #                     raise ValueError(f"Inserire la quantità {i + 1}")
-    #                 quantities.append(float(value))
-    #
-    #             if abs(sum(quantities) - total_qty) > 0.01:
-    #                 raise ValueError(
-    #                     f"La somma delle quantità ({sum(quantities)}) non corrisponde al totale ({total_qty})")
-    #
-    #             dialog.destroy()
-    #             self.perform_split(quantities)
-    #         except ValueError as e:
-    #             messagebox.showerror("Errore", str(e))
-    #
-    #     ttk.Button(button_frame, text="Conferma", command=validate_and_split).pack(side=tk.LEFT, padx=10)
-    #     ttk.Button(button_frame, text="Annulla", command=dialog.destroy).pack(side=tk.LEFT, padx=10)
-    #
-    #     # Focus sul primo campo
-    #     if entries:
-    #         main_frame.grid_slaves(row=1, column=1)[0].focus()
-    #Funzione aggiunt per validare oltre 11 scatole fino a 100
+    #Funzione aggiunta per validare oltre 11 scatole fino a 100
     def _show_quantities_dialog(self, divisions):
         """Mostra la finestra di dialogo per l'inserimento delle quantità"""
         dialog = tk.Toplevel(self.root)
@@ -709,7 +653,7 @@ Batch Number: {result.BatchNumber_HU}"""
         })
 
         for i, qty in enumerate(quantities[1:], 1):
-            new_batch_number = f"{self.current_data.BatchNumber_HU}-{i}"
+            new_batch_number = f"{self.current_data.BatchNumber_HU}_{i}"
             labels_to_print.append({
                 'item_code': self.current_data.Code,
                 'quantity': str(qty),
