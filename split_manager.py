@@ -104,7 +104,7 @@ class LoginWindow:
             cursor = self.db_connection.connection.cursor()
             cursor.execute("""
                 SELECT UserId, Name, [Name] as Username 
-                FROM warehouse.dbo.[User] 
+                FROM dbo.[User] 
                 WHERE [name] = ?
             """, username)
 
@@ -278,16 +278,49 @@ class BoxSplitterApp:
         info_frame.grid_rowconfigure(0, weight=1)
         info_frame.grid_columnconfigure(0, weight=1)
 
+    # def _setup_split_frame(self, parent):
+    #     split_frame = ttk.LabelFrame(parent, text="Split Quantità", padding="5")
+    #     split_frame.grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
+    #
+    #     ttk.Label(split_frame, text="Numero di divisioni:").grid(row=0, column=0, sticky=tk.W)
+    #     divisions_spinbox = ttk.Spinbox(split_frame, from_=2, to=10, textvariable=self.divisions_var, width=5)
+    #     divisions_spinbox.grid(row=0, column=1, padx=5)
+    #     divisions_spinbox.bind('<Return>', lambda e: self.input_quantities())
+    #
+    #     ttk.Button(split_frame, text="Inserisci Quantità", command=self.input_quantities).grid(row=0, column=2, padx=5)
+
+    #Funzione aggiunta per aumentare il numero degli split
     def _setup_split_frame(self, parent):
+        """Setup del frame per lo split delle quantità"""
         split_frame = ttk.LabelFrame(parent, text="Split Quantità", padding="5")
         split_frame.grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
 
         ttk.Label(split_frame, text="Numero di divisioni:").grid(row=0, column=0, sticky=tk.W)
-        divisions_spinbox = ttk.Spinbox(split_frame, from_=2, to=10, textvariable=self.divisions_var, width=5)
+
+        # Modifica qui: aumentiamo il limite massimo e aggiungiamo validazione
+        divisions_spinbox = ttk.Spinbox(
+            split_frame,
+            from_=2,
+            to=100,  # Aumentiamo il limite massimo a 100
+            textvariable=self.divisions_var,
+            width=5,
+            validate='all',
+            validatecommand=(split_frame.register(self._validate_divisions), '%P')
+        )
         divisions_spinbox.grid(row=0, column=1, padx=5)
         divisions_spinbox.bind('<Return>', lambda e: self.input_quantities())
 
         ttk.Button(split_frame, text="Inserisci Quantità", command=self.input_quantities).grid(row=0, column=2, padx=5)
+
+    def _validate_divisions(self, value):
+        """Valida l'input del numero di divisioni"""
+        if value == "":
+            return True
+        try:
+            num = int(value)
+            return 2 <= num <= 100  # Permette valori tra 2 e 100
+        except ValueError:
+            return False
 
     def _setup_printer_frame(self, parent):
         printer_frame = ttk.LabelFrame(parent, text="Configurazione Stampante", padding="5")
@@ -433,11 +466,11 @@ class BoxSplitterApp:
                 l.locationid, 
                 l.Code AS LocationCode,
                 p.PackingId
-            FROM warehouse.dbo.incoming i 
-            INNER JOIN warehouse.dbo.incomingdet id ON i.IncomingId = id.incomingid	
-            INNER JOIN warehouse.dbo.item it ON it.itemid = id.ItemId 
-            INNER JOIN warehouse.dbo.packing p ON id.IncomingDetId = p.IncomingDetId 
-            INNER JOIN warehouse.dbo.Location L ON p.LocationId = l.locationid
+            FROM dbo.incoming i 
+            INNER JOIN dbo.incomingdet id ON i.IncomingId = id.incomingid	
+            INNER JOIN dbo.item it ON it.itemid = id.ItemId 
+            INNER JOIN dbo.packing p ON id.IncomingDetId = p.IncomingDetId 
+            INNER JOIN dbo.Location L ON p.LocationId = l.locationid
             WHERE p.BatchNumber_HU = ?
         """, batch_number)
         return cursor.fetchone()
@@ -481,37 +514,116 @@ Batch Number: {result.BatchNumber_HU}"""
 
         self._show_quantities_dialog(divisions)
 
+    # def _show_quantities_dialog(self, divisions):
+    #     """Mostra la finestra di dialogo per l'inserimento delle quantità"""
+    #     dialog = tk.Toplevel(self.root)
+    #     dialog.title("Inserisci Quantità")
+    #     dialog.geometry("400x400")
+    #     dialog.transient(self.root)
+    #     dialog.grab_set()
+    #
+    #     total_qty = float(self.current_data.PackQty)
+    #     entries = []
+    #
+    #     main_frame = ttk.Frame(dialog, padding="10")
+    #     main_frame.pack(fill=tk.BOTH, expand=True)
+    #
+    #     ttk.Label(main_frame, text=f"Quantità totale: {total_qty}", font=('Arial', 10, 'bold')).grid(row=0, column=0,
+    #                                                                                                  columnspan=2,
+    #                                                                                                  pady=10)
+    #
+    #     for i in range(divisions):
+    #         ttk.Label(main_frame, text=f"Quantità {i + 1}:").grid(row=i + 1, column=0, sticky=tk.W, pady=5)
+    #         entry_var = tk.StringVar()
+    #         entry = ttk.Entry(main_frame, textvariable=entry_var, width=15)
+    #         entry.grid(row=i + 1, column=1, padx=5, pady=5)
+    #         entries.append(entry_var)
+    #
+    #         if i < divisions - 1:
+    #             entry.bind('<Return>',
+    #                        lambda e, next_idx=i + 1: main_frame.grid_slaves(row=next_idx + 1, column=1)[0].focus())
+    #
+    #     button_frame = ttk.Frame(main_frame)
+    #     button_frame.grid(row=divisions + 2, column=0, columnspan=2, pady=20)
+    #
+    #     def validate_and_split():
+    #         try:
+    #             quantities = []
+    #             for i, entry_var in enumerate(entries):
+    #                 value = entry_var.get().strip()
+    #                 if not value:
+    #                     raise ValueError(f"Inserire la quantità {i + 1}")
+    #                 quantities.append(float(value))
+    #
+    #             if abs(sum(quantities) - total_qty) > 0.01:
+    #                 raise ValueError(
+    #                     f"La somma delle quantità ({sum(quantities)}) non corrisponde al totale ({total_qty})")
+    #
+    #             dialog.destroy()
+    #             self.perform_split(quantities)
+    #         except ValueError as e:
+    #             messagebox.showerror("Errore", str(e))
+    #
+    #     ttk.Button(button_frame, text="Conferma", command=validate_and_split).pack(side=tk.LEFT, padx=10)
+    #     ttk.Button(button_frame, text="Annulla", command=dialog.destroy).pack(side=tk.LEFT, padx=10)
+    #
+    #     # Focus sul primo campo
+    #     if entries:
+    #         main_frame.grid_slaves(row=1, column=1)[0].focus()
+    #Funzione aggiunt per validare oltre 11 scatole fino a 100
     def _show_quantities_dialog(self, divisions):
         """Mostra la finestra di dialogo per l'inserimento delle quantità"""
         dialog = tk.Toplevel(self.root)
         dialog.title("Inserisci Quantità")
-        dialog.geometry("400x400")
+        dialog.geometry("400x600")  # Aumentiamo l'altezza della finestra
         dialog.transient(self.root)
         dialog.grab_set()
 
+        # Frame principale con scrollbar
+        container = ttk.Frame(dialog)
+        container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Canvas e scrollbar
+        canvas = tk.Canvas(container)
+        scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Configurazione grid
+        container.grid_columnconfigure(0, weight=1)
+
+        # Visualizzazione quantità totale
         total_qty = float(self.current_data.PackQty)
+        ttk.Label(scrollable_frame, text=f"Quantità totale: {total_qty}",
+                  font=('Arial', 10, 'bold')).grid(row=0, column=0, columnspan=2, pady=10)
+
+        # Lista per tenere traccia delle entry
         entries = []
 
-        main_frame = ttk.Frame(dialog, padding="10")
-        main_frame.pack(fill=tk.BOTH, expand=True)
-
-        ttk.Label(main_frame, text=f"Quantità totale: {total_qty}", font=('Arial', 10, 'bold')).grid(row=0, column=0,
-                                                                                                     columnspan=2,
-                                                                                                     pady=10)
-
+        # Creazione delle entry per le quantità
         for i in range(divisions):
-            ttk.Label(main_frame, text=f"Quantità {i + 1}:").grid(row=i + 1, column=0, sticky=tk.W, pady=5)
+            ttk.Label(scrollable_frame, text=f"Quantità {i + 1}:").grid(
+                row=i + 1, column=0, sticky=tk.W, pady=5)
             entry_var = tk.StringVar()
-            entry = ttk.Entry(main_frame, textvariable=entry_var, width=15)
+            entry = ttk.Entry(scrollable_frame, textvariable=entry_var, width=15)
             entry.grid(row=i + 1, column=1, padx=5, pady=5)
             entries.append(entry_var)
 
             if i < divisions - 1:
                 entry.bind('<Return>',
-                           lambda e, next_idx=i + 1: main_frame.grid_slaves(row=next_idx + 1, column=1)[0].focus())
+                           lambda e, next_idx=i + 1: scrollable_frame.grid_slaves(
+                               row=next_idx + 1, column=1)[0].focus())
 
-        button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=divisions + 2, column=0, columnspan=2, pady=20)
+        # Frame per i pulsanti
+        button_frame = ttk.Frame(scrollable_frame)
+        button_frame.grid(row=divisions + 1, column=0, columnspan=2, pady=20)
 
         def validate_and_split():
             try:
@@ -531,12 +643,18 @@ Batch Number: {result.BatchNumber_HU}"""
             except ValueError as e:
                 messagebox.showerror("Errore", str(e))
 
-        ttk.Button(button_frame, text="Conferma", command=validate_and_split).pack(side=tk.LEFT, padx=10)
-        ttk.Button(button_frame, text="Annulla", command=dialog.destroy).pack(side=tk.LEFT, padx=10)
+        ttk.Button(button_frame, text="Conferma",
+                   command=validate_and_split).pack(side=tk.LEFT, padx=10)
+        ttk.Button(button_frame, text="Annulla",
+                   command=dialog.destroy).pack(side=tk.LEFT, padx=10)
+
+        # Configurazione scrollbar
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
 
         # Focus sul primo campo
         if entries:
-            main_frame.grid_slaves(row=1, column=1)[0].focus()
+            scrollable_frame.grid_slaves(row=1, column=1)[0].focus()
 
     def split_box(self):
         """Gestisce l'intero processo di split della scatola"""
@@ -646,13 +764,13 @@ Batch Number: {result.BatchNumber_HU}"""
                 original_was = f"1 x {self.current_data.PackQty}"
 
                 cursor.execute("""
-                    UPDATE warehouse.dbo.incomingdet
+                    UPDATE dbo.incomingdet
                     SET Qty = ?, OriginalWas = ?
                     WHERE incomingdetid = ?
                 """, quantities[0], original_was, self.current_data.incomingdetid)
 
                 cursor.execute("""
-                    UPDATE warehouse.dbo.Packing
+                    UPDATE dbo.Packing
                     SET qty = ?, BatchNumber_HU = ?
                     WHERE packingid = ?
                 """, quantities[0], self.current_data.BatchNumber_HU, self.current_data.PackingId)
@@ -661,7 +779,7 @@ Batch Number: {result.BatchNumber_HU}"""
                     new_batch_number = f"{self.current_data.BatchNumber_HU}-{i}"
 
                     cursor.execute("""
-                        INSERT INTO warehouse.dbo.incomingdet
+                        INSERT INTO dbo.incomingdet
                         (incomingid, itemid, batchnumber, Qty, OriginalWas)
                         OUTPUT INSERTED.IncomingDetId
                         VALUES (?, ?, ?, ?, ?)
@@ -671,14 +789,14 @@ Batch Number: {result.BatchNumber_HU}"""
                     new_incomingdet_id = cursor.fetchone()[0]
 
                     cursor.execute("""
-                        INSERT INTO warehouse.dbo.packing
+                        INSERT INTO dbo.packing
                         (IncomingDetId, LocationId, Qty, Code, BatchNumber_HU,[CurrentDate],UserId)
                         VALUES (?, ?, ?, ?, ?,GetDate(),?)
                     """, new_incomingdet_id, self.current_data.locationid,
                                    qty, new_batch_number, new_batch_number, self.current_user_id)
 
                     cursor.execute("""
-                        INSERT INTO warehouse.dbo.SplitBoxes
+                        INSERT INTO dbo.SplitBoxes
                         (UserId, IncomingDetid)
                         VALUES (?, ?)
                     """, self.current_user_id, new_incomingdet_id)
